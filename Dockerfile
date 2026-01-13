@@ -27,9 +27,6 @@ COPY --chmod=755 scripts/download-assets.sh /usr/local/bin/download-assets
 RUN mkdir -p /server/universe /server/mods /server/logs /server/.cache \
     && chown -R hytale:hytale /server
 
-# Volumes for data persistence
-VOLUME ["/server/universe", "/server/mods", "/server/logs", "/server/.cache"]
-
 # QUIC port (UDP only!)
 EXPOSE 5520/udp
 
