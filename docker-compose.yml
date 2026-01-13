@@ -1,0 +1,48 @@
+services:
+  hytale:
+    build: .
+    container_name: hytale-server
+
+    # Interactive mode for initial authentication
+    stdin_open: true
+    tty: true
+
+    # UDP port for QUIC
+    ports:
+      - "5520:5520/udp"
+
+    # Environment variables
+    environment:
+      - JAVA_HEAP_SIZE=4G
+      - SERVER_PORT=5520
+      - USE_AOT_CACHE=true
+      # Automatically download assets if missing
+      - AUTO_DOWNLOAD=false
+      # Use pre-release channel (with AUTO_DOWNLOAD)
+      - USE_PRE_RELEASE=false
+      # Keep container running for manual download
+      - WAIT_FOR_ASSETS=false
+      # Additional Java arguments (e.g., -XX:+UseG1GC)
+      - EXTRA_JAVA_ARGS=
+      # Additional server arguments (e.g., --disable-sentry)
+      - EXTRA_SERVER_ARGS=
+
+    # Volumes for persistence
+    volumes:
+      # Main volume for all server files (jar, assets, config, universe, etc.)
+      - hytale-data:/server
+
+    # Restart policy
+    restart: unless-stopped
+
+    # Resource limits (optional)
+    deploy:
+      resources:
+        limits:
+          memory: 6G
+        reservations:
+          memory: 4G
+
+volumes:
+  hytale-data:
+    name: hytale-data
