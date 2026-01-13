@@ -6,50 +6,73 @@ Docker configuration for hosting a dedicated Hytale server.
 
 - Docker & Docker Compose
 - Hytale account (for server authentication)
-- Hytale server files (HytaleServer.jar + Assets.zip)
 
 ## Quick Start
 
-### 1. Get the server files
-
-Copy the files from your Hytale Launcher installation:
-
-```bash
-# Linux
-cp $XDG_DATA_HOME/Hytale/install/release/package/game/latest/Server/* ./game/
-cp $XDG_DATA_HOME/Hytale/install/release/package/game/latest/Assets.zip ./game/
-
-# Windows (WSL)
-cp /mnt/c/Users/<USER>/AppData/Roaming/Hytale/install/release/package/game/latest/Server/* ./game/
-cp /mnt/c/Users/<USER>/AppData/Roaming/Hytale/install/release/package/game/latest/Assets.zip ./game/
-```
-
-### 2. Build and run
+### 1. Build and start
 
 ```bash
 # Build the image
 docker compose build
 
-# Start the server (first launch - interactive mode)
-docker compose up
+# Start the server in background
+docker compose up -d
+
+# Follow the logs
+docker compose logs -f
 ```
 
-### 3. Authenticate the server
+### 2. Authenticate for download (first launch)
 
-On first launch, in the server console:
+On first launch, the downloader needs OAuth2 authentication to download server files.
 
+In the logs, you'll see a URL like:
+
+```text
+Please visit: https://oauth.accounts.hytale.com...
 ```
-> /auth login
+
+Open this URL in your browser and authorize the download.
+
+### 3. Wait for download
+
+The server files will be downloaded automatically. This may take several minutes.
+You'll see progress in the logs.
+
+### 4. Authenticate for players
+
+Once the server is fully booted, you need to authenticate it to allow players to connect.
+
+Wait for this message in the logs:
+
+```text
+[HytaleServer] Hytale Server Booted!
 ```
 
-Follow the instructions to authorize the server via the displayed link.
-
-### 4. Run in background
-
-Once authenticated:
+Then attach to the server console:
 
 ```bash
-docker compose up -d
+docker attach hytale-server
+```
+
+Then type:
+
+```text
+/auth login device
+```
+
+Follow the displayed URL to authorize the server.
+
+> **Note**: To detach from the console without stopping the server, press `Ctrl+P` then `Ctrl+Q`.
+
+### 5. Ready
+
+Your server is now running and players can connect.
+
+To check the logs anytime:
+
+```bash
+docker compose logs -f
 ```
 
 ## Configuration
@@ -61,7 +84,7 @@ docker compose up -d
 | `JAVA_HEAP_SIZE` | `4G` | Memory allocated to the server |
 | `SERVER_PORT` | `5520` | Server UDP port |
 | `USE_AOT_CACHE` | `true` | Use AOT cache for faster startup |
-| `AUTO_DOWNLOAD` | `false` | Automatically download assets if missing |
+| `AUTO_DOWNLOAD` | `true` | Automatically download assets if missing |
 | `WAIT_FOR_ASSETS` | `false` | Keep container running for manual download |
 | `USE_PRE_RELEASE` | `false` | Use pre-release channel (with AUTO_DOWNLOAD) |
 | `EXTRA_JAVA_ARGS` | `` | Additional JVM arguments |
@@ -69,21 +92,16 @@ docker compose up -d
 
 ### Downloading assets
 
-If you don't have the server files (HytaleServer.jar, Assets.zip), several options:
+By default, `AUTO_DOWNLOAD=true` will automatically download server files on first launch.
+A URL will be displayed in the logs for OAuth2 authentication.
 
-#### Option 1: Automatic download (recommended)
+#### Alternative: Manual download
 
-```yaml
-environment:
-  - AUTO_DOWNLOAD=true
-```
-
-On first launch, a URL will be displayed for OAuth2 authentication. Open it in your browser.
-
-#### Option 2: Manual download (container stays running)
+If you prefer to download manually, disable auto-download and enable wait mode:
 
 ```yaml
 environment:
+  - AUTO_DOWNLOAD=false
   - WAIT_FOR_ASSETS=true
 ```
 

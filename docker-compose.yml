@@ -17,7 +17,7 @@ services:
       - SERVER_PORT=5520
       - USE_AOT_CACHE=true
       # Automatically download assets if missing
-      - AUTO_DOWNLOAD=false
+      - AUTO_DOWNLOAD=true
       # Use pre-release channel (with AUTO_DOWNLOAD)
       - USE_PRE_RELEASE=false
       # Keep container running for manual download
