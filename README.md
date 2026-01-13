@@ -127,12 +127,11 @@ environment:
 
 ## File structure
 
-```
+```text
 hytale-server/
 ├── Dockerfile
 ├── docker-compose.yml
 ├── README.md
-├── QUICKSTART.md
 └── scripts/
     ├── entrypoint.sh      # Startup script
     └── download-assets.sh # Asset downloader
