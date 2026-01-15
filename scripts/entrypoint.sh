@@ -3,158 +3,189 @@ set -e
 
 echo "=========================================="
 echo "  Hytale Dedicated Server - Docker"
+echo "  (Version Manager Edition)"
 echo "=========================================="
 
-# Function to automatically download assets
-auto_download_assets() {
-    echo ""
-    echo "-> AUTO_DOWNLOAD enabled, downloading server files..."
-    echo ""
+# Configuration
+SERVER_ROOT="/server"
+VERSION_MANAGER="/usr/local/bin/version-manager"
+AUTO_UPDATE="${AUTO_UPDATE:-true}"
+PATCHLINE="${PATCHLINE:-release}"
 
-    DOWNLOAD_ARGS=""
-    if [[ "${USE_PRE_RELEASE}" == "true" ]]; then
-        DOWNLOAD_ARGS="--pre-release"
+# Export for version manager
+export SERVER_ROOT PATCHLINE
+
+# =============================================================================
+# Legacy Detection
+# =============================================================================
+
+is_legacy_install() {
+    # Legacy install has HytaleServer.jar directly in SERVER_ROOT (not in versions/)
+    [[ -f "${SERVER_ROOT}/HytaleServer.jar" ]]
+}
+
+check_legacy_install() {
+    if is_legacy_install; then
+        echo ""
+        echo "==========================================="
+        echo "  LEGACY INSTALLATION DETECTED"
+        echo "==========================================="
+        echo ""
+        echo "Your server is using the old (v1) flat structure."
+        echo "This version uses a new versioned structure that allows"
+        echo "automatic updates while preserving your data."
+        echo ""
+        echo "To migrate your existing data, run:"
+        echo ""
+        echo "  docker exec -it $(hostname) version-manager migrate"
+        echo ""
+        echo "Then restart this container."
+        echo ""
+        echo "Your data (config, universe, mods, etc.) will be preserved."
+        echo "==========================================="
+        echo ""
+        echo "Waiting for migration... (container will stay running)"
+        echo "Press Ctrl+C to stop."
+        echo ""
+
+        # Keep container alive waiting for user to run migrate
+        while is_legacy_install; do
+            sleep 5
+        done
+
+        echo ""
+        echo "[OK] Migration detected! Restarting..."
+        exec "$0" "$@"
     fi
-
-    # Execute download script
-    /usr/local/bin/download-assets ${DOWNLOAD_ARGS}
 }
 
-# Function to wait for server files
-wait_for_assets() {
+# =============================================================================
+# Version Management
+# =============================================================================
+
+run_version_check() {
     echo ""
-    echo ":: WAIT_FOR_ASSETS enabled - Waiting for server files..."
-    echo "==========================================================="
-    echo "The container is staying active. You can now:"
-    echo ""
-    echo "1. Download assets manually:"
-    echo "   docker exec -it <container> download-assets"
-    echo ""
-    echo "2. Copy files into the container:"
-    echo "   docker cp /path/to/HytaleServer.jar <container>:/server/"
-    echo "   docker cp /path/to/Assets.zip <container>:/server/"
-    echo ""
-    echo "The server will start automatically once files are detected."
-    echo "==========================================================="
+    echo "-> Checking for server updates..."
     echo ""
 
-    # Wait loop
-    while true; do
-        if [[ -f "/server/HytaleServer.jar" ]]; then
-            if [[ -f "/server/Assets.zip" ]] || [[ -d "/server/Assets" ]]; then
-                echo ""
-                echo "[OK] Server files detected! Starting..."
-                echo ""
-                return 0
-            fi
+    if [[ "${AUTO_UPDATE}" == "true" ]]; then
+        if ! "${VERSION_MANAGER}" update; then
+            echo "[WARN] Update check failed, continuing with current version if available"
         fi
-        sleep 5
-    done
-}
-
-# Check if server files are present
-NEED_DOWNLOAD=false
-
-if [[ ! -f "/server/HytaleServer.jar" ]]; then
-    NEED_DOWNLOAD=true
-fi
-
-if [[ ! -f "/server/Assets.zip" ]] && [[ ! -d "/server/Assets" ]]; then
-    NEED_DOWNLOAD=true
-fi
-
-# If files are missing, handle according to configuration
-if [[ "${NEED_DOWNLOAD}" == "true" ]]; then
-    if [[ "${AUTO_DOWNLOAD}" == "true" ]]; then
-        auto_download_assets
-    elif [[ "${WAIT_FOR_ASSETS}" == "true" ]]; then
-        wait_for_assets
     else
-        # Display classic error
-        if [[ ! -f "/server/HytaleServer.jar" ]]; then
-            echo "[ERROR] HytaleServer.jar not found!"
-            echo ""
-            echo "Options to get server files:"
-            echo "1. Mount files from your Hytale installation:"
-            echo "   -v /path/to/hytale/Server:/server/game:ro"
-            echo ""
-            echo "2. Enable automatic download:"
-            echo "   AUTO_DOWNLOAD=true"
-            echo ""
-            echo "3. Keep container running for manual download:"
-            echo "   WAIT_FOR_ASSETS=true"
-            echo ""
-            exit 1
-        fi
+        "${VERSION_MANAGER}" check || true
+    fi
+}
 
-        if [[ ! -f "/server/Assets.zip" ]] && [[ ! -d "/server/Assets" ]]; then
-            echo "[ERROR] Assets.zip or Assets folder not found!"
-            echo "Mount Assets.zip or enable AUTO_DOWNLOAD=true"
-            exit 1
+# =============================================================================
+# Detect Server Files
+# =============================================================================
+
+detect_server_files() {
+    # Versioned structure via symlink
+    if [[ -L "${SERVER_ROOT}/current" ]]; then
+        local current_path
+        current_path=$(readlink -f "${SERVER_ROOT}/current")
+
+        if [[ -f "${current_path}/Server/HytaleServer.jar" ]]; then
+            HYTALE_JAR="${current_path}/Server/HytaleServer.jar"
+            HYTALE_AOT="${current_path}/Server/HytaleServer.aot"
+
+            if [[ -f "${current_path}/Assets.zip" ]]; then
+                ASSETS_PATH="${current_path}/Assets.zip"
+            elif [[ -d "${current_path}/Assets" ]]; then
+                ASSETS_PATH="${current_path}/Assets"
+            fi
+
+            WORKING_DIR="${current_path}"
+            return 0
         fi
     fi
+
+    return 1
+}
+
+# =============================================================================
+# Main Startup Logic
+# =============================================================================
+
+# Step 0: Check for legacy installation (blocks until migrated)
+check_legacy_install
+
+# Step 1: Run version manager if available
+if [[ -x "${VERSION_MANAGER}" ]]; then
+    run_version_check
 fi
 
-# Re-check after potential download
-if [[ ! -f "/server/HytaleServer.jar" ]]; then
-    echo "[ERROR] HytaleServer.jar still not found after download!"
+# Step 2: Try to detect server files
+if ! detect_server_files; then
+    echo "[ERROR] No server files found!"
+    echo ""
+    echo "The version manager should have downloaded them automatically."
+    echo "Check the logs above for errors."
+    echo ""
+    echo "Manual fix:"
+    echo "  docker exec -it hytale-test version-manager update"
+    echo ""
     exit 1
 fi
 
-if [[ ! -f "/server/Assets.zip" ]] && [[ ! -d "/server/Assets" ]]; then
-    echo "[ERROR] Assets still not found after download!"
+# Step 3: Validate detected files
+if [[ -z "${HYTALE_JAR}" ]] || [[ ! -f "${HYTALE_JAR}" ]]; then
+    echo "[ERROR] HytaleServer.jar not found at: ${HYTALE_JAR}"
     exit 1
 fi
 
-# Determine assets path
-ASSETS_PATH="/server/Assets.zip"
-if [[ -d "/server/Assets" ]]; then
-    ASSETS_PATH="/server/Assets"
+if [[ -z "${ASSETS_PATH}" ]]; then
+    echo "[ERROR] Assets not found"
+    exit 1
 fi
 
-# Build Java arguments
+# Step 4: Build Java arguments
 JAVA_ARGS="-Xmx${JAVA_HEAP_SIZE} -Xms${JAVA_HEAP_SIZE}"
 
-# Add AOT cache if enabled and present
-if [[ "${USE_AOT_CACHE}" == "true" ]] && [[ -f "/server/HytaleServer.aot" ]]; then
+if [[ "${USE_AOT_CACHE}" == "true" ]] && [[ -f "${HYTALE_AOT}" ]]; then
     echo "[OK] Using AOT cache for faster startup"
-    JAVA_ARGS="${JAVA_ARGS} -XX:AOTCache=/server/HytaleServer.aot"
+    JAVA_ARGS="${JAVA_ARGS} -XX:AOTCache=${HYTALE_AOT}"
 fi
 
-# Add extra Java arguments
 if [[ -n "${EXTRA_JAVA_ARGS}" ]]; then
     JAVA_ARGS="${JAVA_ARGS} ${EXTRA_JAVA_ARGS}"
 fi
 
-# Build server arguments
+# Step 5: Build server arguments
 SERVER_ARGS="--assets ${ASSETS_PATH} --bind 0.0.0.0:${SERVER_PORT}"
 
-# Add extra server arguments
 if [[ -n "${EXTRA_SERVER_ARGS}" ]]; then
     SERVER_ARGS="${SERVER_ARGS} ${EXTRA_SERVER_ARGS}"
 fi
 
-# Check if this is first launch (not yet authenticated)
-if [[ ! -f "/server/.auth_token" ]] && [[ ! -f "/server/config.json" ]]; then
+# Step 6: First launch detection
+if [[ ! -f "${SERVER_ROOT}/shared/config.json" ]] || [[ "$(cat "${SERVER_ROOT}/shared/config.json")" == "{}" ]]; then
     echo ""
     echo "[!] FIRST LAUNCH DETECTED"
     echo "==========================================="
     echo "After startup, authenticate with:"
     echo "  /auth login"
     echo ""
-    echo "Then visit the displayed URL to authorize the server."
+    echo "Then visit the displayed URL to authorize."
     echo "==========================================="
     echo ""
 fi
 
+# Step 7: Display configuration
+echo ""
 echo "Configuration:"
+echo "  - Version: $(cat "${SERVER_ROOT}/.version" 2>/dev/null || echo 'unknown')"
 echo "  - Heap: ${JAVA_HEAP_SIZE}"
 echo "  - Port: ${SERVER_PORT}/udp"
 echo "  - Assets: ${ASSETS_PATH}"
 echo "  - AOT Cache: ${USE_AOT_CACHE}"
+echo "  - Working Dir: ${WORKING_DIR}"
 echo ""
 echo "Starting server..."
 echo ""
 
-# Launch the server
-exec java ${JAVA_ARGS} -jar /server/HytaleServer.jar ${SERVER_ARGS}
+# Step 8: Change to working directory and launch
+cd "${WORKING_DIR}"
+exec java ${JAVA_ARGS} -jar "${HYTALE_JAR}" ${SERVER_ARGS}

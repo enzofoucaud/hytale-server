@@ -3,7 +3,7 @@ services:
     build: .
     container_name: hytale-server
 
-    # Interactive mode for initial authentication
+    # Interactive mode for authentication
     stdin_open: true
     tty: true
 
@@ -16,26 +16,24 @@ services:
       - JAVA_HEAP_SIZE=4G
       - SERVER_PORT=5520
       - USE_AOT_CACHE=true
-      # Automatically download assets if missing
-      - AUTO_DOWNLOAD=true
-      # Use pre-release channel (with AUTO_DOWNLOAD)
-      - USE_PRE_RELEASE=false
-      # Keep container running for manual download
-      - WAIT_FOR_ASSETS=false
-      # Additional Java arguments (e.g., -XX:+UseG1GC)
+      # Version management
+      - AUTO_UPDATE=true
+      - PATCHLINE=release
+      # Additional arguments
       - EXTRA_JAVA_ARGS=
-      # Additional server arguments (e.g., --disable-sentry)
       - EXTRA_SERVER_ARGS=
 
     # Volumes for persistence
     volumes:
-      # Main volume for all server files (jar, assets, config, universe, etc.)
+      # Named volume for server data
       - hytale-data:/server
+      # Credentials file mounted from host (rw needed for token refresh)
+      - ./.hytale-downloader-credentials.json:/server/.hytale-downloader-credentials.json
 
     # Restart policy
     restart: unless-stopped
 
-    # Resource limits (optional)
+    # Resource limits
     deploy:
       resources:
         limits:

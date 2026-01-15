@@ -1,10 +1,10 @@
-# Hytale Dedicated Server
+# Hytale Dedicated Server - Version Manager Edition
 # Documentation: https://support.hytale.com/hc/en-us/articles/45326769420827-Hytale-Server-Manual
 
 FROM eclipse-temurin:25-jre
 
 LABEL maintainer="enzo"
-LABEL description="Hytale Dedicated Server"
+LABEL description="Hytale Dedicated Server with automatic version management"
 
 # Create non-root user for security
 RUN groupadd -r hytale && useradd -r -g hytale hytale
@@ -12,7 +12,7 @@ RUN groupadd -r hytale && useradd -r -g hytale hytale
 # Working directory
 WORKDIR /server
 
-# Install dependencies (unzip for extracting assets, curl for downloader)
+# Install dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     unzip \
     curl \
@@ -21,10 +21,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Copy scripts
 COPY --chmod=755 scripts/entrypoint.sh /entrypoint.sh
-COPY --chmod=755 scripts/download-assets.sh /usr/local/bin/download-assets
+COPY --chmod=755 scripts/version-manager.sh /usr/local/bin/version-manager
 
 # Create required directories
-RUN mkdir -p /server/universe /server/mods /server/logs /server/.cache \
+RUN mkdir -p /server/versions /server/shared /server/downloads \
+    && mkdir -p /server/shared/.cache /server/shared/logs \
+    && mkdir -p /server/shared/mods /server/shared/universe \
     && chown -R hytale:hytale /server
 
 # QUIC port (UDP only!)
@@ -36,8 +38,8 @@ ENV SERVER_PORT="5520"
 ENV USE_AOT_CACHE="true"
 ENV EXTRA_JAVA_ARGS=""
 ENV EXTRA_SERVER_ARGS=""
-ENV WAIT_FOR_ASSETS="false"
-ENV AUTO_DOWNLOAD="false"
+ENV AUTO_UPDATE="true"
+ENV PATCHLINE="release"
 
 # Non-root user
 USER hytale
